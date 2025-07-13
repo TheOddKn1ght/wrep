@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,7 +16,37 @@ type Config struct {
 	Unit   string
 }
 
+func MergeConfig(fileCfg Config, cliCfg Config) Config {
+	final := fileCfg
+
+	if cliCfg.APIKey != "" {
+		final.APIKey = cliCfg.APIKey
+	}
+
+	if cliCfg.City != "" {
+		final.City = cliCfg.City
+	}
+
+	if cliCfg.Unit != "" {
+		final.Unit = cliCfg.Unit
+	}
+
+	return final
+}
+
 func GetConfig() (Config, error) {
+
+	cliCity := flag.String("city", "", "override city from CLI")
+	cliUnit := flag.String("unit", "", "override unit from CLI")
+	cliAPIKey := flag.String("apikey", "", "override API key from CLI")
+	flag.Parse()
+
+	cliConfig := Config{
+		APIKey: *cliAPIKey,
+		City:   *cliCity,
+		Unit:   *cliUnit,
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return Config{}, fmt.Errorf("could not determine user home directory: %w", err)
@@ -35,7 +66,7 @@ func GetConfig() (Config, error) {
 	}
 	defer f.Close()
 
-	config := Config{}
+	fileConfig := Config{}
 	scanner := bufio.NewScanner(f)
 
 	for scanner.Scan() {
@@ -55,11 +86,11 @@ func GetConfig() (Config, error) {
 
 		switch key {
 		case "apiKey":
-			config.APIKey = value
+			fileConfig.APIKey = value
 		case "defaultCity":
-			config.City = value
+			fileConfig.City = value
 		case "units":
-			config.Unit = value
+			fileConfig.Unit = value
 		}
 	}
 
@@ -67,11 +98,13 @@ func GetConfig() (Config, error) {
 		return Config{}, fmt.Errorf("error reading config file: %w", err)
 	}
 
-	if config.APIKey == "" || config.City == "" {
+	if fileConfig.APIKey == "" || fileConfig.City == "" {
 		return Config{}, errors.New("config missing required fields (apiKey and defaultCity)")
 	}
 
-	return config, nil
+	final := MergeConfig(fileConfig, cliConfig)
+
+	return final, nil
 }
 
 func GenerateDefaultConfig(configPath string) error {

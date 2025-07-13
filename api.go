@@ -74,6 +74,5 @@ func FetchWeather(config Config) {
 		}
 	}
 
-
 	fmt.Printf("Weather: %s, %s\n", weather.Temperature, weather.Description)
 }
