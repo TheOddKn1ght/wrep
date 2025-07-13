@@ -12,12 +12,14 @@ import (
 type WeatherInfo struct {
 	Temperature string
 	Description string
+	UVIndex string
 }
 
 type WeatherAPIResponse struct {
 	Current struct {
 		TempC     float64 `json:"temp_c"`
 		TempF     float64 `json:"temp_f"`
+		UVIndex   float64 `json:"uv"`
 		Condition struct {
 			Text string `json:"text"`
 		} `json:"condition"`
@@ -71,6 +73,7 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 
 	weather := WeatherInfo{
 		Description: apiResp.Current.Condition.Text,
+		UVIndex: fmt.Sprintf("%.1f", apiResp.Current.UVIndex),
 	}
 	if config.Unit == "imperial" {
 		weather.Temperature = fmt.Sprintf("%.1f°F", apiResp.Current.TempF)
