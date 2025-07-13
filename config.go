@@ -16,80 +16,72 @@ type Config struct {
 }
 
 func GetConfig() (Config, error) {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return Config{}, fmt.Errorf("could not determine user home directory: %w", err)
+	}
+
 	configPath := filepath.Join(home, ".wrep")
 
-	if _, err := os.Stat(configPath); err == nil {
-		fmt.Println("config exists")
-
-		f, err := os.Open(configPath)
-
-		if err != nil {
-			fmt.Println("Error opening file")
-			return Config{}, nil
+	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+		if err := GenerateDefaultConfig(configPath); err != nil {
+			return Config{}, fmt.Errorf("failed to generate default config: %w", err)
 		}
-
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-
-		config := Config{}
-
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-
-			switch key {
-			case "apiKey":
-				config.APIKey = value
-			case "defaultCity":
-				config.City = value
-			case "units":
-				config.Unit = value
-			}
-
-		}
-
-		if err := scanner.Err(); err != nil {
-			fmt.Println("Error reading file:", err)
-			return Config{}, err
-		}
-
-		fmt.Println(config)
-		return config, nil
-
-	} else if errors.Is(err, os.ErrNotExist) {
-		GenerateDefaultConfig(configPath)
 	}
 
-	return Config{}, nil
-}
-
-func GenerateDefaultConfig(configPath string) {
-	fmt.Println("does not exist")
-	f, err := os.Create(configPath)
+	f, err := os.Open(configPath)
 	if err != nil {
-		fmt.Println("Could not create the config file")
-		os.Exit(1)
+		return Config{}, fmt.Errorf("failed to open config file: %w", err)
 	}
-
 	defer f.Close()
 
-	f.WriteString("apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=c\n")
+	config := Config{}
+	scanner := bufio.NewScanner(f)
 
-	if err != nil {
-		fmt.Println("Could not write to the config file")
-		os.Exit(1)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "apiKey":
+			config.APIKey = value
+		case "defaultCity":
+			config.City = value
+		case "units":
+			config.Unit = value
+		}
 	}
+
+	if err := scanner.Err(); err != nil {
+		return Config{}, fmt.Errorf("error reading config file: %w", err)
+	}
+
+	if config.APIKey == "" || config.City == "" {
+		return Config{}, errors.New("config missing required fields (apiKey and defaultCity)")
+	}
+
+	return config, nil
+}
+
+func GenerateDefaultConfig(configPath string) error {
+	f, err := os.Create(configPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=c"
+	_, err = f.WriteString(defaultContent)
+	return err
 }
