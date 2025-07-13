@@ -81,7 +81,7 @@ func GenerateDefaultConfig(configPath string) error {
 	}
 	defer f.Close()
 
-	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=c"
+	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric"
 	_, err = f.WriteString(defaultContent)
 	return err
 }
