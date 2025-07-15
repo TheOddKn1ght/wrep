@@ -11,9 +11,10 @@ import (
 )
 
 type Config struct {
-	APIKey string
-	City   string
-	Unit   string
+	APIProvider string
+	APIKey      string
+	City        string
+	Unit        string
 }
 
 func MergeConfig(fileCfg Config, cliCfg Config) Config {
@@ -31,6 +32,10 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 		final.Unit = cliCfg.Unit
 	}
 
+	if cliCfg.APIProvider != "" {
+		final.APIProvider = cliCfg.APIProvider
+	}
+
 	return final
 }
 
@@ -39,12 +44,14 @@ func GetConfig() (Config, error) {
 	cliCity := flag.String("city", "", "override city from CLI")
 	cliUnit := flag.String("unit", "", "override unit from CLI")
 	cliAPIKey := flag.String("apikey", "", "override API key from CLI")
+	cliAPIProvider := flag.String("apiprovider", "", "API provider to use: wttr.in or weatherapi")
 	flag.Parse()
 
 	cliConfig := Config{
-		APIKey: *cliAPIKey,
-		City:   *cliCity,
-		Unit:   *cliUnit,
+		APIProvider: *cliAPIProvider,
+		APIKey:      *cliAPIKey,
+		City:        *cliCity,
+		Unit:        *cliUnit,
 	}
 
 	home, err := os.UserHomeDir()
@@ -91,6 +98,8 @@ func GetConfig() (Config, error) {
 			fileConfig.City = value
 		case "units":
 			fileConfig.Unit = value
+		case "apiProvider":
+			fileConfig.APIProvider = value
 		}
 	}
 
@@ -114,7 +123,7 @@ func GenerateDefaultConfig(configPath string) error {
 	}
 	defer f.Close()
 
-	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric"
+	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric\napiProvider=wttr.in"
 	_, err = f.WriteString(defaultContent)
 	return err
 }
