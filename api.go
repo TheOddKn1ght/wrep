@@ -15,6 +15,17 @@ type WeatherInfo struct {
 	UVIndex string
 }
 
+type WttrInResponse struct {
+    CurrentCondition []struct {
+        Temp_C      string `json:"temp_C"`
+        Temp_F      string `json:"temp_F"`
+        UvIndex     string `json:"uvIndex"`
+        WeatherDesc []struct {
+            Value string `json:"value"`
+        } `json:"weatherDesc"`
+    } `json:"current_condition"`
+}
+
 type WeatherAPIResponse struct {
 	Current struct {
 		TempC     float64 `json:"temp_c"`
@@ -26,7 +37,59 @@ type WeatherAPIResponse struct {
 	} `json:"current"`
 }
 
-func FetchWeather(config Config) (WeatherInfo, error) {
+func FetchWttrInAPI(config Config) (WeatherInfo, error) {
+    baseURL := "https://wttr.in/"
+    city := config.City
+    u, err := url.Parse(baseURL + city)
+    if err != nil {
+        return WeatherInfo{}, fmt.Errorf("failed to parse wttr.in URL: %w", err)
+    }
+    q := u.Query()
+    q.Set("format", "j1")
+    u.RawQuery = q.Encode()
+    url := u.String()
+
+    fmt.Println("Requesting:", url)
+
+    resp, err := http.Get(url)
+    if err != nil {
+        return WeatherInfo{}, fmt.Errorf("HTTP request failed: %w", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return WeatherInfo{}, fmt.Errorf("unexpected HTTP status: %d %s", resp.StatusCode, resp.Status)
+    }
+
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return WeatherInfo{}, fmt.Errorf("failed to read response body: %w", err)
+    }
+
+    var apiResp WttrInResponse
+    if err := json.Unmarshal(body, &apiResp); err != nil {
+        return WeatherInfo{}, fmt.Errorf("failed to decode JSON response: %w", err)
+    }
+
+    if len(apiResp.CurrentCondition) == 0 {
+        return WeatherInfo{}, errors.New("no current condition data in response")
+    }
+
+    cc := apiResp.CurrentCondition[0]
+    weather := WeatherInfo{
+        Description: cc.WeatherDesc[0].Value,
+        UVIndex:     cc.UvIndex,
+    }
+    if config.Unit == "imperial" {
+        weather.Temperature = cc.Temp_F + "°F"
+    } else {
+        weather.Temperature = cc.Temp_C + "°C"
+    }
+
+    return weather, nil
+}
+
+func FetchWeatherAPI(config Config) (WeatherInfo, error) {
 	const baseURL = "https://api.weatherapi.com/v1/current.json"
 
 	u, err := url.Parse(baseURL)
