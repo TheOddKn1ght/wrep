@@ -15,18 +15,18 @@ func main() {
 	var info WeatherInfo
 
 	switch config.APIProvider {
-		case "weatherapi":
-			info, err = FetchWeatherAPI(config)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-		default:
-			info, err = FetchWttrInAPI(config)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
+	case "weatherapi":
+		info, err = FetchWeatherAPI(config)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	default:
+		info, err = FetchWttrInAPI(config)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 
 	Display(info)

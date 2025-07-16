@@ -105,7 +105,9 @@ func FetchWeatherAPI(config Config) (WeatherInfo, error) {
 	u.RawQuery = q.Encode()
 	url := u.String()
 
-	fmt.Println("Requesting: ", url)
+	if config.Verbose {
+		fmt.Println("Requesting: ", url)
+	}
 
 	resp, err := http.Get(url)
 	if err != nil {
