@@ -13,12 +13,12 @@ A simple command-line weather reporter written in Go. It fetches and displays cu
 ## Installation
 
 1. **Clone the repository:**
-   ```sh
+```sh
 git clone https://github.com/TheOddKn1ght/wrep.git
 cd wrep
 ```
 2. **Build the project:**
-   ```sh
+```sh
 go build
 ```
 
