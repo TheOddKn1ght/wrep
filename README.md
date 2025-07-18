@@ -29,12 +29,18 @@ Run the program from the command line:
 ./wrep [flags]
 ```
 
+With the `--fancy` flag, the output will include weather emojis:
+```sh
+./wrep --fancy
+```
+
 ### Command-line Flags
 - `-city`         Override city from CLI (e.g., `-city=London`)
 - `-unit`         Override unit from CLI (`metric` or `imperial`)
 - `-apikey`       Override API key from CLI (for WeatherAPI)
 - `-apiprovider`  API provider to use: `wttr.in` or `weatherapi`
 - `-v`            Verbose output
+- `--fancy`       Fancy output with weather emojis
 
 ### Example
 ```sh
