@@ -20,5 +20,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	Display(info)
+	Display(info, config.Fancy)
 }

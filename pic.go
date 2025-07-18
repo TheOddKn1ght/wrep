@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	Reset   = "\033[0m"
@@ -13,6 +16,30 @@ const (
 	White   = "\033[37m"
 )
 
-func Display(info WeatherInfo) {
+func Display(info WeatherInfo, fancy bool) {
+	if fancy {
+		fmt.Println(getWeatherPicture(info.Description))
+		//fmt.Println("[debug] description (lowercased):", strings.ToLower(info.Description))
+	}
 	fmt.Printf(Cyan+"Weather: %s, %s, UVIndex %s\n"+Reset, info.Temperature, info.Description, info.UVIndex)
+}
+
+func getWeatherPicture(desc string) string {
+	desc = strings.ToLower(desc)
+	switch {
+	case strings.Contains(desc, "sun") || strings.Contains(desc, "clear"):
+		return "☀️  Sunny"
+	case strings.Contains(desc, "cloudy"):
+		return "☁️  Cloudy"
+	case strings.Contains(desc, "rain"):
+		return "🌧️  Rainy"
+	case strings.Contains(desc, "snow"):
+		return "❄️  Snowy"
+	case strings.Contains(desc, "storm") || strings.Contains(desc, "thunder"):
+		return "⛈️  Stormy"
+	case strings.Contains(desc, "fog") || strings.Contains(desc, "mist"):
+		return "🌫️  Foggy"
+	default:
+		return "🌈  Weather Unknown"
+	}
 }

@@ -16,6 +16,7 @@ type Config struct {
 	City        string
 	Unit        string
 	Verbose     bool
+	Fancy       bool
 }
 
 func MergeConfig(fileCfg Config, cliCfg Config) Config {
@@ -39,6 +40,7 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 
 	// We don't want -v to be accessible from the configuration file for now
 	final.Verbose = cliCfg.Verbose
+	final.Fancy = cliCfg.Fancy
 
 	return final
 }
@@ -50,6 +52,7 @@ func GetConfig() (Config, error) {
 	cliAPIKey := flag.String("apikey", "", "override API key from CLI")
 	cliAPIProvider := flag.String("apiprovider", "", "API provider to use: wttr.in or weatherapi")
 	cliVerbose := flag.Bool("v", false, "verbose")
+	cliFancy := flag.Bool("fancy", false, "fancy output with pictures") // Add fancy flag
 	flag.Parse()
 
 	cliConfig := Config{
@@ -58,6 +61,7 @@ func GetConfig() (Config, error) {
 		City:        *cliCity,
 		Unit:        *cliUnit,
 		Verbose:     *cliVerbose,
+		Fancy:       *cliFancy,
 	}
 
 	home, err := os.UserHomeDir()
