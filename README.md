@@ -40,7 +40,7 @@ With the `--fancy` flag, the output will include weather emojis:
 - `-apikey`       Override API key from CLI (for WeatherAPI)
 - `-apiprovider`  API provider to use: `wttr.in` or `weatherapi`
 - `-v`            Verbose output
-- `--fancy`       Fancy output with weather emojis
+- `-fancy`        Fancy output with weather emojis
 
 ### Example
 ```sh
