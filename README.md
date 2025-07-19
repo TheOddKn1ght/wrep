@@ -46,10 +46,13 @@ Run the program from the command line:
 
 On first run, a config file will be created at `~/.wrep` with default values:
 ```
+# default values
 apiKey=your_api_key_here
 defaultCity=Moscow
 units=metric
 apiProvider=wttr.in
+fancy=off
+verbose=off
 ```
 You can edit this file to set your preferred defaults. Command-line flags override config file values.
 
@@ -57,3 +60,5 @@ You can edit this file to set your preferred defaults. Command-line flags overri
 - `defaultCity` Default city to fetch weather for
 - `units`       `metric` or `imperial`
 - `apiProvider` `wttr.in` or `weatherapi`
+- `fancy` `on` or `off`
+- `verbose` `on` or `off`
