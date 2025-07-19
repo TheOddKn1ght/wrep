@@ -29,11 +29,6 @@ Run the program from the command line:
 ./wrep [flags]
 ```
 
-With the `--fancy` flag, the output will include weather emojis:
-```sh
-./wrep --fancy
-```
-
 ### Command-line Flags
 - `-city`         Override city from CLI (e.g., `-city=London`)
 - `-unit`         Override unit from CLI (`metric` or `imperial`)
