@@ -38,9 +38,13 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 		final.APIProvider = cliCfg.APIProvider
 	}
 
-	// We don't want -v to be accessible from the configuration file for now
-	final.Verbose = cliCfg.Verbose
-	final.Fancy = cliCfg.Fancy
+	if cliCfg.Fancy {
+		final.Fancy = cliCfg.Fancy
+	}
+
+	if cliCfg.Verbose {
+		final.Verbose = cliCfg.Verbose
+	}
 
 	return final
 }
@@ -52,7 +56,7 @@ func GetConfig() (Config, error) {
 	cliAPIKey := flag.String("apikey", "", "override API key from CLI")
 	cliAPIProvider := flag.String("apiprovider", "", "API provider to use: wttr.in or weatherapi")
 	cliVerbose := flag.Bool("v", false, "verbose")
-	cliFancy := flag.Bool("fancy", false, "fancy output with pictures") // Add fancy flag
+	cliFancy := flag.Bool("fancy", false, "fancy output with emojis")
 	flag.Parse()
 
 	cliConfig := Config{
@@ -110,6 +114,14 @@ func GetConfig() (Config, error) {
 			fileConfig.Unit = value
 		case "apiProvider":
 			fileConfig.APIProvider = value
+		case "fancy":
+			if value == "on" {
+				fileConfig.Fancy = true
+			}
+		case "verbose":
+			if value == "on" {
+				fileConfig.Verbose = true
+			}
 		}
 	}
 
@@ -133,7 +145,7 @@ func GenerateDefaultConfig(configPath string) error {
 	}
 	defer f.Close()
 
-	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric\napiProvider=wttr.in"
+	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric\napiProvider=wttr.in\nverbose=off\nfancy=off"
 	_, err = f.WriteString(defaultContent)
 	return err
 }
