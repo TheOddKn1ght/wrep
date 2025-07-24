@@ -17,6 +17,7 @@ type Config struct {
 	Unit        string
 	Verbose     bool
 	Fancy       bool
+	Forecast    int
 }
 
 func MergeConfig(fileCfg Config, cliCfg Config) Config {
@@ -46,6 +47,10 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 		final.Verbose = cliCfg.Verbose
 	}
 
+	if cliCfg.Forecast != 0 {
+		final.Forecast = cliCfg.Forecast
+	}
+
 	return final
 }
 
@@ -57,6 +62,7 @@ func GetConfig() (Config, error) {
 	cliAPIProvider := flag.String("apiprovider", "", "API provider to use: wttr.in or weatherapi")
 	cliVerbose := flag.Bool("v", false, "verbose")
 	cliFancy := flag.Bool("fancy", false, "fancy output with emojis")
+	cliForecast := flag.Int("f", 0, "number of days to display forecast for (wttr.in only)")
 	flag.Parse()
 
 	cliConfig := Config{
@@ -66,6 +72,7 @@ func GetConfig() (Config, error) {
 		Unit:        *cliUnit,
 		Verbose:     *cliVerbose,
 		Fancy:       *cliFancy,
+		Forecast:    *cliForecast,
 	}
 
 	home, err := os.UserHomeDir()
@@ -122,6 +129,7 @@ func GetConfig() (Config, error) {
 			if value == "on" {
 				fileConfig.Verbose = true
 			}
+		// do not load forecast from config file
 		}
 	}
 
