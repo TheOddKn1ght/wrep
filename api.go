@@ -24,6 +24,7 @@ type WttrInResponse struct {
 			Value string `json:"value"`
 		} `json:"weatherDesc"`
 	} `json:"current_condition"`
+	Weather []map[string]interface{} `json:"weather"` // for forecast, generic for debug
 }
 
 type WeatherAPIResponse struct {
@@ -94,6 +95,30 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 				weather.Temperature = cc.Temp_F + "°F"
 			} else {
 				weather.Temperature = cc.Temp_C + "°C"
+			}
+			// debug output
+			if config.Forecast > 0 && len(apiResp.Weather) > 0 {
+				fmt.Println("Forecast:")
+				for i := 0; i < config.Forecast && i < len(apiResp.Weather); i++ {
+					w := apiResp.Weather[i]
+					date, _ := w["date"].(string)
+					maxtempc, _ := w["maxtempC"].(string)
+					maxtempf, _ := w["maxtempF"].(string)
+					weatherArr, _ := w["hourly"].([]interface{})
+					var desc string
+					if len(weatherArr) > 0 {
+						hour0, _ := weatherArr[0].(map[string]interface{})
+						if hour0 != nil {
+							if descArr, ok := hour0["weatherDesc"].([]interface{}); ok && len(descArr) > 0 {
+								descMap, _ := descArr[0].(map[string]interface{})
+								if descMap != nil {
+									desc, _ = descMap["value"].(string)
+								}
+							}
+						}
+					}
+					fmt.Printf("Day %d: %s, MaxC: %s, MaxF: %s, Desc: %s\n", i+1, date, maxtempc, maxtempf, desc)
+				}
 			}
 			return weather, nil
 		}
