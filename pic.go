@@ -44,7 +44,6 @@ func Display(info WeatherInfo, config Config) {
 	}
 
 	if len(info.Forecast) > 0 {
-		fmt.Println()
 		if config.Fancy {
 			fmt.Println(Bold + "Forecast:" + Reset)
 		} else {
