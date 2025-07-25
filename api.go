@@ -13,6 +13,7 @@ type WeatherInfo struct {
 	Temperature string
 	Description string
 	UVIndex     string
+	Forecast    []map[string]interface{}
 }
 
 type WttrInResponse struct {
@@ -61,6 +62,7 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 			weather := WeatherInfo{
 				Description: apiResp.Current.Condition.Text,
 				UVIndex:     fmt.Sprintf("%.1f", apiResp.Current.UVIndex),
+				Forecast:    nil,
 			}
 			if config.Unit == "imperial" {
 				weather.Temperature = fmt.Sprintf("%.1f°F", apiResp.Current.TempF)
@@ -90,35 +92,15 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 			weather := WeatherInfo{
 				Description: cc.WeatherDesc[0].Value,
 				UVIndex:     cc.UvIndex,
+				Forecast:    nil,
 			}
 			if config.Unit == "imperial" {
 				weather.Temperature = cc.Temp_F + "°F"
 			} else {
 				weather.Temperature = cc.Temp_C + "°C"
 			}
-			// debug output
 			if config.Forecast > 0 && len(apiResp.Weather) > 0 {
-				fmt.Println("Forecast:")
-				for i := 0; i < config.Forecast && i < len(apiResp.Weather); i++ {
-					w := apiResp.Weather[i]
-					date, _ := w["date"].(string)
-					maxtempc, _ := w["maxtempC"].(string)
-					maxtempf, _ := w["maxtempF"].(string)
-					weatherArr, _ := w["hourly"].([]interface{})
-					var desc string
-					if len(weatherArr) > 0 {
-						hour0, _ := weatherArr[0].(map[string]interface{})
-						if hour0 != nil {
-							if descArr, ok := hour0["weatherDesc"].([]interface{}); ok && len(descArr) > 0 {
-								descMap, _ := descArr[0].(map[string]interface{})
-								if descMap != nil {
-									desc, _ = descMap["value"].(string)
-								}
-							}
-						}
-					}
-					fmt.Printf("Day %d: %s, MaxC: %s, MaxF: %s, Desc: %s\n", i+1, date, maxtempc, maxtempf, desc)
-				}
+				weather.Forecast = apiResp.Weather
 			}
 			return weather, nil
 		}
@@ -133,6 +115,8 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 		return WeatherInfo{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+
 
 	if config.APIProvider == "weatherapi" {
 		switch resp.StatusCode {
@@ -157,6 +141,7 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 	if err != nil {
 		return WeatherInfo{}, fmt.Errorf("failed to read response body: %w", err)
 	}
+
 
 	return parseResponse(body)
 }
