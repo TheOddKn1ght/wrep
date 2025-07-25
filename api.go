@@ -116,8 +116,6 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 	}
 	defer resp.Body.Close()
 
-
-
 	if config.APIProvider == "weatherapi" {
 		switch resp.StatusCode {
 		case http.StatusUnauthorized:
@@ -141,7 +139,6 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 	if err != nil {
 		return WeatherInfo{}, fmt.Errorf("failed to read response body: %w", err)
 	}
-
 
 	return parseResponse(body)
 }

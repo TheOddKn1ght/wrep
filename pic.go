@@ -30,71 +30,69 @@ const (
 	Foggy
 )
 
-
 func Display(info WeatherInfo, config Config) {
-    
-    weatherType := ClassifyWeather(info.Description)
 
-    color := ""
-    emoji := ""
-    reset := ""
-    if config.Fancy {
-        color = WeatherColor(weatherType)
-        emoji = WeatherEmoji(weatherType) + " "
-        reset = Reset
-    }
+	weatherType := ClassifyWeather(info.Description)
 
-	
-    if len(info.Forecast) > 0 {
+	color := ""
+	emoji := ""
+	reset := ""
+	if config.Fancy {
+		color = WeatherColor(weatherType)
+		emoji = WeatherEmoji(weatherType) + " "
+		reset = Reset
+	}
+
+	if len(info.Forecast) > 0 {
 		fmt.Println()
-        if config.Fancy {
+		if config.Fancy {
 			fmt.Println(Bold + "Forecast:" + Reset)
-			} else {
-				fmt.Println("Forecast:")
-        }
-        
-        for i := 0; i < len(info.Forecast) && i < config.Forecast; i++ {
-            w := info.Forecast[i]
-            date, _ := w["date"].(string)
-            maxtempc, _ := w["maxtempC"].(string)
-            maxtempf, _ := w["maxtempF"].(string)
-            mintempc, _ := w["mintempC"].(string)
-            mintempf, _ := w["mintempF"].(string)
-            weatherArr, _ := w["hourly"].([]interface{})
-            var desc string
-            if len(weatherArr) > 0 {
+		} else {
+			fmt.Println("Forecast:")
+		}
+
+		for i := 0; i < len(info.Forecast) && i < config.Forecast; i++ {
+			w := info.Forecast[i]
+			date, _ := w["date"].(string)
+			maxtempc, _ := w["maxtempC"].(string)
+			maxtempf, _ := w["maxtempF"].(string)
+			mintempc, _ := w["mintempC"].(string)
+			mintempf, _ := w["mintempF"].(string)
+			weatherArr, _ := w["hourly"].([]interface{})
+			var desc string
+			if len(weatherArr) > 0 {
 				hour0, _ := weatherArr[0].(map[string]interface{})
-                if hour0 != nil {
+				if hour0 != nil {
 					if descArr, ok := hour0["weatherDesc"].([]interface{}); ok && len(descArr) > 0 {
 						descMap, _ := descArr[0].(map[string]interface{})
-                        if descMap != nil {
+						if descMap != nil {
 							desc, _ = descMap["value"].(string)
-                        }
-                    }
-                }
-            }
-			
-            wt := ClassifyWeather(desc)
-            color := ""
-            emoji := ""
-            reset := ""
-            if config.Fancy {
-				color = WeatherColor(wt)
-                emoji = WeatherEmoji(wt) + " "
-                reset = Reset
-            }
-            var maxTemp, minTemp string
-            if config.Unit == "imperial" {
-				maxTemp = maxtempf + "°F"
-                minTemp = mintempf + "°F"
-				} else {
-					maxTemp = maxtempc + "°C"
-					minTemp = mintempc + "°C"
+						}
+					}
 				}
-				fmt.Printf("%s%sDay %d (%s): %s, %s - %s%s\n", color, emoji, i+1, date, desc, minTemp, maxTemp, reset)
 			}
+
+			wt := ClassifyWeather(desc)
+			color := ""
+			emoji := ""
+			reset := ""
+			if config.Fancy {
+				color = WeatherColor(wt)
+				emoji = WeatherEmoji(wt) + " "
+				reset = Reset
+			}
+			var maxTemp, minTemp string
+			if config.Unit == "imperial" {
+				maxTemp = maxtempf + "°F"
+				minTemp = mintempf + "°F"
 			} else {
-				fmt.Printf("%s%sWeather: %s, %s, UVIndex %s%s\n", color, emoji, info.Temperature, info.Description, info.UVIndex, reset)
+				maxTemp = maxtempc + "°C"
+				minTemp = mintempc + "°C"
+			}
+			fmt.Printf("%s%sDay %d (%s): %s, %s - %s%s\n", color, emoji, i+1, date, desc, minTemp, maxTemp, reset)
+		}
+	} else {
+		fmt.Printf("%s%sWeather: %s, %s, UVIndex %s%s\n", color, emoji, info.Temperature, info.Description, info.UVIndex, reset)
 	}
 }
 

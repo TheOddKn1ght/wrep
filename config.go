@@ -129,7 +129,7 @@ func GetConfig() (Config, error) {
 			if value == "on" {
 				fileConfig.Verbose = true
 			}
-		// do not load forecast from config file
+			// do not load forecast from config file
 		}
 	}
 

@@ -21,5 +21,5 @@ func main() {
 	}
 
 	Display(info, config)
-	
+
 }
