@@ -36,9 +36,7 @@ Run the program from the command line:
 - `-apiprovider`  API provider to use: `wttr.in` or `weatherapi`
 - `-v`            Verbose output
 - `-fancy`        Fancy output with weather emojis
-- `-f`:  
-  (Experimental, wttr.in only) Show a debug output with a multi-day weather forecast.  
-  This feature is not finished yet and is only available when using the `wttr.in` API provider.  
+- `-f`            Show a multi-day weather forecast (e.g., `-f 3` for 3 days)  
  
 
 ### Example
