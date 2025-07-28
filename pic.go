@@ -59,18 +59,18 @@ func Display(info WeatherInfo, config Config) {
             maxtempf, _ := w["maxtempF"].(string)
             mintempc, _ := w["mintempC"].(string)
             mintempf, _ := w["mintempF"].(string)
-            weatherArr, _ := w["hourly"].([]interface{})
+
             var desc string
-            if len(weatherArr) > 0 {
-                hour0, _ := weatherArr[0].(map[string]interface{})
-                if hour0 != nil {
+            if weatherArr, ok := w["hourly"].([]interface{}); ok && len(weatherArr) > 0 {
+                if hour0, ok := weatherArr[0].(map[string]interface{}); ok {
                     if descArr, ok := hour0["weatherDesc"].([]interface{}); ok && len(descArr) > 0 {
-                        descMap, _ := descArr[0].(map[string]interface{})
-                        if descMap != nil {
+                        if descMap, ok := descArr[0].(map[string]interface{}); ok {
                             desc, _ = descMap["value"].(string)
                         }
                     }
                 }
+            } else if descArr, ok := w["weatherDesc"].([]map[string]interface{}); ok && len(descArr) > 0 {
+                desc, _ = descArr[0]["value"].(string)
             }
 
             wt := ClassifyWeather(desc)
