@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type WeatherInfo struct {
@@ -37,6 +38,20 @@ type WeatherAPIResponse struct {
 			Text string `json:"text"`
 		} `json:"condition"`
 	} `json:"current"`
+	Forecast struct {
+		ForecastDay []struct {
+			Date string `json:"date"`
+			Day  struct {
+				MaxTempC float64 `json:"maxtemp_c"`
+				MaxTempF float64 `json:"maxtemp_f"`
+				MinTempC float64 `json:"mintemp_c"`
+				MinTempF float64 `json:"mintemp_f"`
+				Condition struct {
+					Text string `json:"text"`
+				} `json:"condition"`
+			} `json:"day"`
+		} `json:"forecastday"`
+	} `json:"forecast"`
 }
 
 func FetchWeather(config Config) (WeatherInfo, error) {
@@ -45,13 +60,23 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 
 	switch config.APIProvider {
 	case "weatherapi":
-		u, err := url.Parse("https://api.weatherapi.com/v1/current.json")
+		var baseURL string
+		if config.Forecast > 0 {
+			baseURL = "https://api.weatherapi.com/v1/forecast.json"
+		} else {
+			baseURL = "https://api.weatherapi.com/v1/current.json"
+		}
+
+		u, err := url.Parse(baseURL)
 		if err != nil {
 			return WeatherInfo{}, fmt.Errorf("failed to parse base URL: %w", err)
 		}
 		q := u.Query()
 		q.Set("key", config.APIKey)
 		q.Set("q", config.City)
+		if config.Forecast > 0 {
+			q.Set("days", fmt.Sprintf("%d", config.Forecast))
+		}
 		u.RawQuery = q.Encode()
 		urlStr = u.String()
 		parseResponse = func(body []byte) (WeatherInfo, error) {
@@ -59,16 +84,35 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 			if err := json.Unmarshal(body, &apiResp); err != nil {
 				return WeatherInfo{}, fmt.Errorf("failed to decode JSON response: %w", err)
 			}
+
 			weather := WeatherInfo{
-				Description: apiResp.Current.Condition.Text,
+				Description: strings.TrimSpace(apiResp.Current.Condition.Text),
 				UVIndex:     fmt.Sprintf("%.1f", apiResp.Current.UVIndex),
 				Forecast:    nil,
 			}
+
 			if config.Unit == "imperial" {
 				weather.Temperature = fmt.Sprintf("%.1f°F", apiResp.Current.TempF)
 			} else {
 				weather.Temperature = fmt.Sprintf("%.1f°C", apiResp.Current.TempC)
 			}
+
+			if config.Forecast > 0 && len(apiResp.Forecast.ForecastDay) > 0 {
+				weather.Forecast = make([]map[string]interface{}, len(apiResp.Forecast.ForecastDay))
+				for i, day := range apiResp.Forecast.ForecastDay {
+					weather.Forecast[i] = map[string]interface{}{
+						"date":      day.Date,
+						"maxtempC":  fmt.Sprintf("%.1f", day.Day.MaxTempC),
+						"maxtempF":  fmt.Sprintf("%.1f", day.Day.MaxTempF),
+						"mintempC":  fmt.Sprintf("%.1f", day.Day.MinTempC),
+						"mintempF":  fmt.Sprintf("%.1f", day.Day.MinTempF),
+						"weatherDesc": []map[string]interface{}{
+							{"value": day.Day.Condition.Text},
+						},
+					}
+				}
+			}
+
 			return weather, nil
 		}
 	default:
