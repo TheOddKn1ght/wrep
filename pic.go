@@ -45,9 +45,9 @@ func Display(info WeatherInfo, config Config) {
     if len(info.Forecast) > 0 {
         if config.Fancy {
             fmt.Println(Bold + "Forecast:" + Reset)
-            fmt.Println("--------------------------------------------------------------------")
-            fmt.Printf("%-10s %-15s %-20s %-10s %-10s\n", "Day", "Date", "Description", "Min Temp", "Max Temp")
-            fmt.Println("--------------------------------------------------------------------")
+            fmt.Println("-------------------------------------------------------------------------")
+            fmt.Printf("%-10s %-15s %-24s %-10s %-10s\n", "Day", "Date", "Description", "Min Temp", "Max Temp")
+            fmt.Println("-------------------------------------------------------------------------")
         } else {
             fmt.Println("Forecast:")
         }
@@ -92,14 +92,14 @@ func Display(info WeatherInfo, config Config) {
             }
 
             if config.Fancy {
-                fmt.Printf("%s%-10s %-15s %-20s %-10s %-10s%s\n",
+                fmt.Printf("%s%-10s %-15s %-25s %-10s %-10s%s\n",
                     color, fmt.Sprintf("Day %d", i+1), date, emoji+" "+desc, minTemp, maxTemp, reset)
             } else {
                 fmt.Printf("Day %d (%s): %s, %s - %s\n", i+1, date, desc, minTemp, maxTemp)
             }
         }
         if config.Fancy {
-            fmt.Println("--------------------------------------------------------------------")
+            fmt.Println("-------------------------------------------------------------------------")
         }
     } else {
         fmt.Printf("%s%sWeather: %s, %s, UVIndex %s%s\n", color, emoji, info.Temperature, info.Description, info.UVIndex, reset)
