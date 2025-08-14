@@ -12,9 +12,7 @@ func main() {
 		fmt.Println(err)
 	}
 
-	var info WeatherInfo
-
-	info, err = FetchWeather(config)
+	info, err := FetchWeather(config)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
