@@ -26,7 +26,7 @@ type WttrInResponse struct {
 			Value string `json:"value"`
 		} `json:"weatherDesc"`
 	} `json:"current_condition"`
-	Weather []map[string]interface{} `json:"weather"` // for forecast, generic for debug
+	Weather []map[string]interface{} `json:"weather"`
 }
 
 type WeatherAPIResponse struct {
@@ -42,10 +42,10 @@ type WeatherAPIResponse struct {
 		ForecastDay []struct {
 			Date string `json:"date"`
 			Day  struct {
-				MaxTempC float64 `json:"maxtemp_c"`
-				MaxTempF float64 `json:"maxtemp_f"`
-				MinTempC float64 `json:"mintemp_c"`
-				MinTempF float64 `json:"mintemp_f"`
+				MaxTempC  float64 `json:"maxtemp_c"`
+				MaxTempF  float64 `json:"maxtemp_f"`
+				MinTempC  float64 `json:"mintemp_c"`
+				MinTempF  float64 `json:"mintemp_f"`
 				Condition struct {
 					Text string `json:"text"`
 				} `json:"condition"`
@@ -79,6 +79,7 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 		}
 		u.RawQuery = q.Encode()
 		urlStr = u.String()
+
 		parseResponse = func(body []byte) (WeatherInfo, error) {
 			var apiResp WeatherAPIResponse
 			if err := json.Unmarshal(body, &apiResp); err != nil {
@@ -98,25 +99,27 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 			}
 
 			if config.Forecast > 0 && len(apiResp.Forecast.ForecastDay) > 0 {
-				weather.Forecast = make([]map[string]interface{}, len(apiResp.Forecast.ForecastDay))
-				for i, day := range apiResp.Forecast.ForecastDay {
-					weather.Forecast[i] = map[string]interface{}{
-						"date":      day.Date,
-						"maxtempC":  fmt.Sprintf("%.1f", day.Day.MaxTempC),
-						"maxtempF":  fmt.Sprintf("%.1f", day.Day.MaxTempF),
-						"mintempC":  fmt.Sprintf("%.1f", day.Day.MinTempC),
-						"mintempF":  fmt.Sprintf("%.1f", day.Day.MinTempF),
+				weather.Forecast = make([]map[string]interface{}, 0, len(apiResp.Forecast.ForecastDay))
+				for _, day := range apiResp.Forecast.ForecastDay {
+					weather.Forecast = append(weather.Forecast, map[string]interface{}{
+						"date":     day.Date,
+						"maxtempC": fmt.Sprintf("%.1f", day.Day.MaxTempC),
+						"maxtempF": fmt.Sprintf("%.1f", day.Day.MaxTempF),
+						"mintempC": fmt.Sprintf("%.1f", day.Day.MinTempC),
+						"mintempF": fmt.Sprintf("%.1f", day.Day.MinTempF),
 						"weatherDesc": []map[string]interface{}{
 							{"value": day.Day.Condition.Text},
 						},
-					}
+					})
 				}
 			}
 
 			return weather, nil
 		}
+
 	default:
-		u, err := url.Parse("https://wttr.in/" + config.City)
+		baseURL := "https://wttr.in/" + url.PathEscape(config.City)
+		u, err := url.Parse(baseURL)
 		if err != nil {
 			return WeatherInfo{}, fmt.Errorf("failed to parse wttr.in URL: %w", err)
 		}
@@ -124,28 +127,39 @@ func FetchWeather(config Config) (WeatherInfo, error) {
 		q.Set("format", "j1")
 		u.RawQuery = q.Encode()
 		urlStr = u.String()
+
 		parseResponse = func(body []byte) (WeatherInfo, error) {
 			var apiResp WttrInResponse
 			if err := json.Unmarshal(body, &apiResp); err != nil {
 				return WeatherInfo{}, fmt.Errorf("failed to decode JSON response: %w", err)
 			}
+
 			if len(apiResp.CurrentCondition) == 0 {
 				return WeatherInfo{}, errors.New("no current condition data in response")
 			}
+
 			cc := apiResp.CurrentCondition[0]
+
+			if len(cc.WeatherDesc) == 0 {
+				return WeatherInfo{}, errors.New("no weather description in response")
+			}
+
 			weather := WeatherInfo{
-				Description: cc.WeatherDesc[0].Value,
+				Description: strings.TrimSpace(cc.WeatherDesc[0].Value),
 				UVIndex:     cc.UvIndex,
 				Forecast:    nil,
 			}
+
 			if config.Unit == "imperial" {
-				weather.Temperature = cc.Temp_F + "°F"
+				weather.Temperature = fmt.Sprintf("%s°F", cc.Temp_F)
 			} else {
-				weather.Temperature = cc.Temp_C + "°C"
+				weather.Temperature = fmt.Sprintf("%s°C", cc.Temp_C)
 			}
+
 			if config.Forecast > 0 && len(apiResp.Weather) > 0 {
 				weather.Forecast = apiResp.Weather
 			}
+
 			return weather, nil
 		}
 	}
