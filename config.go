@@ -55,7 +55,7 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 }
 
 func GetConfig() (Config, error) {
-
+	cliConfigDir := flag.String("config", "", "directory path for config file")
 	cliCity := flag.String("city", "", "override city from CLI")
 	cliUnit := flag.String("unit", "", "override unit from CLI")
 	cliAPIKey := flag.String("apikey", "", "override API key from CLI")
@@ -75,12 +75,18 @@ func GetConfig() (Config, error) {
 		Forecast:    *cliForecast,
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return Config{}, fmt.Errorf("could not determine user home directory: %w", err)
+	var configDir string
+	if *cliConfigDir != "" {
+		configDir = *cliConfigDir
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return Config{}, fmt.Errorf("could not determine user home directory: %w", err)
+		}
+		configDir = home
 	}
 
-	configPath := filepath.Join(home, ".wrep")
+	configPath := filepath.Join(configDir, ".wrep")
 
 	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
 		if err := GenerateDefaultConfig(configPath); err != nil {
@@ -129,7 +135,6 @@ func GetConfig() (Config, error) {
 			if value == "on" {
 				fileConfig.Verbose = true
 			}
-			// do not load forecast from config file
 		}
 	}
 
@@ -153,7 +158,7 @@ func GenerateDefaultConfig(configPath string) error {
 	}
 	defer f.Close()
 
-	defaultContent := "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric\napiProvider=wttr.in\nverbose=off\nfancy=off"
+	const defaultContent = "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric\napiProvider=wttr.in\nverbose=off\nfancy=off"
 	_, err = f.WriteString(defaultContent)
 	return err
 }
