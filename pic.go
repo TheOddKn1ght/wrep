@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 const (
@@ -30,6 +31,36 @@ const (
 	Foggy
 )
 
+const (
+	forecastDayW  = 7
+	forecastDateW = 12
+	forecastCondW = 24
+	forecastTempW = 8
+)
+
+func truncate(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes-3]) + "..."
+}
+
+func padRight(s string, w int) string {
+	if len([]rune(s)) >= w {
+		return truncate(s, w)
+	}
+	return s + strings.Repeat(" ", w-len([]rune(s)))
+}
+
+func formatForecastDate(dateStr string) string {
+	t, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return dateStr
+	}
+	return t.Format("Mon, Jan 2")
+}
+
 func Display(info WeatherInfo, config Config) {
 
 	weatherType := ClassifyWeather(info.Description)
@@ -43,18 +74,39 @@ func Display(info WeatherInfo, config Config) {
 	}
 
 	if len(info.Forecast) > 0 {
+
+		top := "┌" + strings.Repeat("─", forecastDayW) + "┬" + strings.Repeat("─", forecastDateW) + "┬" + strings.Repeat("─", forecastCondW) + "┬" + strings.Repeat("─", forecastTempW) + "┬" + strings.Repeat("─", forecastTempW) + "┐"
+		mid := "├" + strings.Repeat("─", forecastDayW) + "┼" + strings.Repeat("─", forecastDateW) + "┼" + strings.Repeat("─", forecastCondW) + "┼" + strings.Repeat("─", forecastTempW) + "┼" + strings.Repeat("─", forecastTempW) + "┤"
+		bot := "└" + strings.Repeat("─", forecastDayW) + "┴" + strings.Repeat("─", forecastDateW) + "┴" + strings.Repeat("─", forecastCondW) + "┴" + strings.Repeat("─", forecastTempW) + "┴" + strings.Repeat("─", forecastTempW) + "┘"
+
 		if config.Fancy {
-			fmt.Println(Bold + "Forecast:" + Reset)
-			fmt.Println("-------------------------------------------------------------------------")
-			fmt.Printf("%-10s %-15s %-24s %-10s %-10s\n", "Day", "Date", "Description", "Min Temp", "Max Temp")
-			fmt.Println("-------------------------------------------------------------------------")
+			fmt.Println()
+			fmt.Println(Bold + "  📅 Forecast" + Reset)
+			fmt.Println("  " + top)
+			fmt.Printf("  │%s│%s│%s│%s│%s│\n",
+				padRight(" Day", forecastDayW),
+				padRight(" Date", forecastDateW),
+				padRight(" Conditions", forecastCondW),
+				padRight(" Min", forecastTempW),
+				padRight(" Max", forecastTempW))
+			fmt.Println("  " + mid)
 		} else {
-			fmt.Println("Forecast:")
+			fmt.Println()
+			fmt.Println("Forecast")
+			fmt.Println(top)
+			fmt.Printf("│%s│%s│%s│%s│%s│\n",
+				padRight(" Day", forecastDayW),
+				padRight(" Date", forecastDateW),
+				padRight(" Conditions", forecastCondW),
+				padRight(" Min", forecastTempW),
+				padRight(" Max", forecastTempW))
+			fmt.Println(mid)
 		}
 
 		for i := 0; i < len(info.Forecast) && i < config.Forecast; i++ {
 			w := info.Forecast[i]
 			date, _ := w["date"].(string)
+			dateFormatted := formatForecastDate(date)
 			maxtempc, _ := w["maxtempC"].(string)
 			maxtempf, _ := w["maxtempF"].(string)
 			mintempc, _ := w["mintempC"].(string)
@@ -74,13 +126,9 @@ func Display(info WeatherInfo, config Config) {
 			}
 
 			wt := ClassifyWeather(desc)
-			color := ""
-			emoji := ""
-			reset := ""
+			rowColor := ""
 			if config.Fancy {
-				color = WeatherColor(wt)
-				emoji = WeatherEmoji(wt) + " "
-				reset = Reset
+				rowColor = WeatherColor(wt)
 			}
 			var maxTemp, minTemp string
 			if config.Unit == "imperial" {
@@ -91,15 +139,30 @@ func Display(info WeatherInfo, config Config) {
 				minTemp = mintempc + "°C"
 			}
 
+			dayLabel := fmt.Sprintf(" Day %d", i+1)
+			dateCell := padRight(" "+dateFormatted, forecastDateW)
+			minCell := padRight(" "+minTemp, forecastTempW)
+			maxCell := padRight(" "+maxTemp, forecastTempW)
+			condCell := padRight(truncate(desc, forecastCondW), forecastCondW)
+
 			if config.Fancy {
-				fmt.Printf("%s%-10s %-15s %-25s %-10s %-10s%s\n",
-					color, fmt.Sprintf("Day %d", i+1), date, emoji+" "+desc, minTemp, maxTemp, reset)
+				fmt.Printf("  │%s%s%s│%s│%s%s%s│%s│%s│\n",
+					rowColor, padRight(dayLabel, forecastDayW), Reset,
+					dateCell,
+					rowColor, condCell, Reset,
+					minCell, maxCell)
 			} else {
-				fmt.Printf("Day %d (%s): %s, %s - %s\n", i+1, date, desc, minTemp, maxTemp)
+				fmt.Printf("│%s│%s│%s│%s│%s│\n",
+					padRight(dayLabel, forecastDayW), dateCell, condCell, minCell, maxCell)
 			}
 		}
+
 		if config.Fancy {
-			fmt.Println("-------------------------------------------------------------------------")
+			fmt.Println("  " + bot)
+			fmt.Println()
+		} else {
+			fmt.Println(bot)
+			fmt.Println()
 		}
 	} else {
 		fmt.Printf("%s%sWeather: %s, %s, UVIndex %s%s\n", color, emoji, info.Temperature, info.Description, info.UVIndex, reset)
