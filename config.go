@@ -17,6 +17,10 @@ type Config struct {
 	Unit        string
 	Verbose     bool
 	Fancy       bool
+	NoColor     bool
+	JSON        bool
+	Quiet       bool
+	ShowVersion bool
 	Forecast    int
 }
 
@@ -26,27 +30,30 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 	if cliCfg.APIKey != "" {
 		final.APIKey = cliCfg.APIKey
 	}
-
 	if cliCfg.City != "" {
 		final.City = cliCfg.City
 	}
-
 	if cliCfg.Unit != "" {
 		final.Unit = cliCfg.Unit
 	}
-
 	if cliCfg.APIProvider != "" {
 		final.APIProvider = cliCfg.APIProvider
 	}
-
 	if cliCfg.Fancy {
-		final.Fancy = cliCfg.Fancy
+		final.Fancy = true
 	}
-
 	if cliCfg.Verbose {
-		final.Verbose = cliCfg.Verbose
+		final.Verbose = true
 	}
-
+	if cliCfg.NoColor {
+		final.NoColor = true
+	}
+	if cliCfg.JSON {
+		final.JSON = true
+	}
+	if cliCfg.Quiet {
+		final.Quiet = true
+	}
 	if cliCfg.Forecast != 0 {
 		final.Forecast = cliCfg.Forecast
 	}
@@ -55,15 +62,27 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 }
 
 func GetConfig() (Config, error) {
-	cliConfigDir := flag.String("config", "", "directory path for config file")
-	cliCity := flag.String("city", "", "override city from CLI")
-	cliUnit := flag.String("unit", "", "override unit from CLI")
-	cliAPIKey := flag.String("apikey", "", "override API key from CLI")
-	cliAPIProvider := flag.String("apiprovider", "", "API provider to use: wttr.in or weatherapi")
-	cliVerbose := flag.Bool("v", false, "verbose")
-	cliFancy := flag.Bool("fancy", false, "fancy output with emojis")
-	cliForecast := flag.Int("f", 0, "number of days to display forecast for (wttr.in only)")
+	fs := flag.CommandLine
+	fs.Usage = usage
+
+	cliConfigDir := flag.String("config", "", "directory containing the .wrep config file (default: $HOME)")
+	cliCity := flag.String("city", "", "override city")
+	cliUnit := flag.String("unit", "", "override unit: metric or imperial")
+	cliAPIKey := flag.String("apikey", "", "override API key (WeatherAPI only)")
+	cliAPIProvider := flag.String("apiprovider", "", "API provider: wttr.in or weatherapi")
+	cliVerbose := flag.Bool("v", false, "verbose output")
+	cliFancy := flag.Bool("fancy", false, "fancy output with colors and emojis")
+	cliNoColor := flag.Bool("no-color", false, "disable color escapes (also honors NO_COLOR env)")
+	cliJSON := flag.Bool("json", false, "emit raw JSON instead of formatted output")
+	cliQuiet := flag.Bool("q", false, "suppress non-error messages")
+	cliForecast := flag.Int("f", 0, "show an N-day forecast (e.g. -f 3)")
+	cliShowVersion := flag.Bool("V", false, "print version and exit")
+	cliShowVersionLong := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *cliShowVersion || *cliShowVersionLong {
+		return Config{ShowVersion: true}, nil
+	}
 
 	cliConfig := Config{
 		APIProvider: *cliAPIProvider,
@@ -72,20 +91,20 @@ func GetConfig() (Config, error) {
 		Unit:        *cliUnit,
 		Verbose:     *cliVerbose,
 		Fancy:       *cliFancy,
+		NoColor:     *cliNoColor,
+		JSON:        *cliJSON,
+		Quiet:       *cliQuiet,
 		Forecast:    *cliForecast,
 	}
 
-	var configDir string
-	if *cliConfigDir != "" {
-		configDir = *cliConfigDir
-	} else {
+	configDir := *cliConfigDir
+	if configDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return Config{}, fmt.Errorf("could not determine user home directory: %w", err)
 		}
 		configDir = home
 	}
-
 	configPath := filepath.Join(configDir, ".wrep")
 
 	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
@@ -94,61 +113,84 @@ func GetConfig() (Config, error) {
 		}
 	}
 
-	f, err := os.Open(configPath)
+	fileConfig, err := readConfigFile(configPath)
+	if err != nil {
+		return Config{}, err
+	}
+
+	final := MergeConfig(fileConfig, cliConfig)
+
+	if final.APIProvider == "" {
+		final.APIProvider = ProviderWttr
+	}
+	if final.Unit == "" {
+		final.Unit = UnitMetric
+	}
+	if !validProvider(final.APIProvider) {
+		return Config{}, fmt.Errorf("invalid apiProvider %q (want %q or %q)", final.APIProvider, ProviderWttr, ProviderWeatherAPI)
+	}
+	if !validUnit(final.Unit) {
+		return Config{}, fmt.Errorf("invalid unit %q (want %q or %q)", final.Unit, UnitMetric, UnitImperial)
+	}
+	if final.City == "" {
+		return Config{}, errors.New("config missing required field: defaultCity (or pass -city)")
+	}
+	if final.APIProvider == ProviderWeatherAPI && (final.APIKey == "" || final.APIKey == "your_api_key_here") {
+		return Config{}, errors.New("apiProvider=weatherapi requires apiKey (set in ~/.wrep or pass -apikey)")
+	}
+	if final.JSON && final.Fancy {
+		final.Fancy = false
+	}
+
+	return final, nil
+}
+
+func readConfigFile(path string) (Config, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("failed to open config file: %w", err)
 	}
 	defer f.Close()
 
-	fileConfig := Config{}
+	var cfg Config
 	scanner := bufio.NewScanner(f)
-
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
 			continue
 		}
-
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
 		switch key {
 		case "apiKey":
-			fileConfig.APIKey = value
+			cfg.APIKey = value
 		case "defaultCity":
-			fileConfig.City = value
+			cfg.City = value
 		case "units":
-			fileConfig.Unit = value
+			cfg.Unit = value
 		case "apiProvider":
-			fileConfig.APIProvider = value
+			cfg.APIProvider = value
 		case "fancy":
-			if value == "on" {
-				fileConfig.Fancy = true
-			}
+			cfg.Fancy = parseBool(value)
 		case "verbose":
-			if value == "on" {
-				fileConfig.Verbose = true
-			}
+			cfg.Verbose = parseBool(value)
+		case "noColor":
+			cfg.NoColor = parseBool(value)
+		case "json":
+			cfg.JSON = parseBool(value)
+		case "quiet":
+			cfg.Quiet = parseBool(value)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		return Config{}, fmt.Errorf("error reading config file: %w", err)
 	}
-
-	if fileConfig.APIKey == "" || fileConfig.City == "" {
-		return Config{}, errors.New("config missing required fields (apiKey and defaultCity)")
-	}
-
-	final := MergeConfig(fileConfig, cliConfig)
-
-	return final, nil
+	return cfg, nil
 }
 
 func GenerateDefaultConfig(configPath string) error {
@@ -158,7 +200,51 @@ func GenerateDefaultConfig(configPath string) error {
 	}
 	defer f.Close()
 
-	const defaultContent = "apiKey=your_api_key_here\ndefaultCity=Moscow\nunits=metric\napiProvider=wttr.in\nverbose=off\nfancy=off"
+	const defaultContent = `# wrep config - flags on the command line override these values.
+apiKey=your_api_key_here
+defaultCity=Moscow
+units=metric
+apiProvider=wttr.in
+fancy=off
+verbose=off
+noColor=off
+`
 	_, err = f.WriteString(defaultContent)
 	return err
+}
+
+func parseBool(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "on", "true", "yes", "1":
+		return true
+	}
+	return false
+}
+
+func validProvider(p string) bool {
+	return p == ProviderWttr || p == ProviderWeatherAPI
+}
+
+func validUnit(u string) bool {
+	return u == UnitMetric || u == UnitImperial
+}
+
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintln(out, "wrep — a tiny command-line weather reporter.")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Usage:")
+	fmt.Fprintln(out, "  wrep [flags]")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Flags:")
+	flag.PrintDefaults()
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Examples:")
+	fmt.Fprintln(out, "  wrep -city=Berlin -fancy")
+	fmt.Fprintln(out, "  wrep -f 3 -fancy")
+	fmt.Fprintln(out, "  wrep -apiprovider=weatherapi -apikey=$KEY -city=Tokyo -unit=imperial")
+	fmt.Fprintln(out, "  wrep -json | jq")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Environment:")
+	fmt.Fprintln(out, "  NO_COLOR   when set (any value), disables color escapes even with -fancy")
 }

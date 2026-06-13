@@ -1,66 +1,87 @@
- # 🚧 Work in Progress 🚧
- 
- # wrep
+# wrep
 
-A simple command-line weather reporter written in Go. It fetches and displays current weather information for a specified city using either [wttr.in](https://wttr.in) or [WeatherAPI](https://www.weatherapi.com/).
+A small command-line weather reporter written in Go. Fetches current weather and an optional multi-day forecast from either [wttr.in](https://wttr.in) (no key required) or [WeatherAPI](https://www.weatherapi.com/).
 
 ## Features
-- Fetches weather data from two providers: wttr.in (default) and WeatherAPI
-- Displays temperature, weather description, and UV index
-- Supports metric and imperial units
-- Configurable via a config file and command-line flags
+- Two providers: `wttr.in` (default) and `weatherapi`
+- Current weather: temperature, description, UV index
+- Multi-day forecast as a Unicode table
+- Plain output by default; `-fancy` adds colors + emoji
+- Honors [NO_COLOR](https://no-color.org/) and detects when stdout isn't a TTY
+- `-json` mode for piping into `jq` or scripts
+- Metric / imperial units, configurable via file or CLI
 
-## Installation
+## Install
 
-1. **Clone the repository:**
 ```sh
 git clone https://github.com/TheOddKn1ght/wrep.git
 cd wrep
-```
-2. **Build the project:**
-```sh
 go build
 ```
 
+Or `go install github.com/TheOddKn1ght/wrep@latest`.
+
 ## Usage
 
-Run the program from the command line:
 ```sh
 ./wrep [flags]
 ```
 
-### Command-line Flags
-- `-city`         Override city from CLI (e.g., `-city=London`)
-- `-unit`         Override unit from CLI (`metric` or `imperial`)
-- `-apikey`       Override API key from CLI (for WeatherAPI)
-- `-apiprovider`  API provider to use: `wttr.in` or `weatherapi`
-- `-v`            Verbose output
-- `-fancy`        Fancy output with weather emojis
-- `-f`            Show a multi-day weather forecast (e.g., `-f 3` for 3 days)  
- 
+### Flags
+| Flag | Description |
+|------|-------------|
+| `-city`         | Override city (e.g. `-city=London`) |
+| `-unit`         | `metric` or `imperial` |
+| `-apikey`       | WeatherAPI key (overrides config) |
+| `-apiprovider`  | `wttr.in` or `weatherapi` |
+| `-f`            | Show an N-day forecast (e.g. `-f 3`). wttr.in caps at 3. |
+| `-fancy`        | Color + emoji output |
+| `-no-color`     | Disable color escapes (honors `NO_COLOR` env too) |
+| `-json`         | Emit raw JSON instead of formatted output |
+| `-v`            | Verbose (prints the request URL to stderr) |
+| `-q`            | Quiet (suppresses warnings) |
+| `-V`, `-version`| Print version and exit |
+| `-config`       | Directory containing `.wrep` (default: `$HOME`) |
 
-### Example
+### Examples
 ```sh
-./wrep -city=Berlin -unit=imperial -apiprovider=weatherapi -apikey=YOUR_API_KEY
+./wrep -city=Berlin -fancy
+./wrep -f 3 -fancy
+./wrep -apiprovider=weatherapi -apikey=$KEY -city=Tokyo -unit=imperial
+./wrep -json | jq '.temp_c'
 ```
+
+### Environment
+- `NO_COLOR` — when set to any non-empty value, color escapes are suppressed even with `-fancy`.
 
 ## Configuration
 
-On first run, a config file will be created at `~/.wrep` with default values:
+On first run, a config file is created at `~/.wrep`:
+
 ```
-# default values
 apiKey=your_api_key_here
 defaultCity=Moscow
 units=metric
 apiProvider=wttr.in
 fancy=off
 verbose=off
+noColor=off
 ```
-You can edit this file to set your preferred defaults. Command-line flags override config file values.
 
-- `apiKey`      Your WeatherAPI key (not required for wttr.in)
-- `defaultCity` Default city to fetch weather for
-- `units`       `metric` or `imperial`
-- `apiProvider` `wttr.in` or `weatherapi`
-- `fancy` `on` or `off`
-- `verbose` `on` or `off`
+Edit it to set your defaults. CLI flags override file values.
+
+| Key | Values |
+|-----|--------|
+| `apiKey`      | Your WeatherAPI key (not required for wttr.in) |
+| `defaultCity` | Default city |
+| `units`       | `metric` or `imperial` |
+| `apiProvider` | `wttr.in` or `weatherapi` |
+| `fancy`       | `on` / `off` (also accepts `true`/`false`/`yes`/`1`) |
+| `verbose`     | `on` / `off` |
+| `noColor`     | `on` / `off` |
+
+## Build a tagged release
+
+```sh
+go build -ldflags "-X main.version=$(git describe --tags --always)" -o wrep
+```
