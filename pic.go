@@ -176,6 +176,10 @@ func useColor(config Config) bool {
 	if os.Getenv("TERM") == "dumb" {
 		return false
 	}
+	return stdoutIsTTY()
+}
+
+func stdoutIsTTY() bool {
 	fi, err := os.Stdout.Stat()
 	if err != nil {
 		return true

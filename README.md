@@ -9,6 +9,7 @@ A small command-line weather reporter written in Go. Fetches current weather and
 - Plain output by default; `-fancy` adds colors + emoji
 - Honors [NO_COLOR](https://no-color.org/) and detects when stdout isn't a TTY
 - `-json` mode for piping into `jq` or scripts
+- Live mode: refresh on a configurable interval (`-live -interval=30s`)
 - Metric / imperial units, configurable via file or CLI
 
 ## Install
@@ -42,6 +43,8 @@ Or `go install github.com/TheOddKn1ght/wrep@latest`.
 | `-q`            | Quiet (suppresses warnings) |
 | `-V`, `-version`| Print version and exit |
 | `-config`       | Directory containing `.wrep` (default: `$HOME`) |
+| `-live`         | Refresh on an interval until interrupted (Ctrl+C to exit) |
+| `-interval`     | Refresh interval as a Go duration (e.g. `30s`, `5m`); default `60s`, min `5s` |
 
 ### Examples
 ```sh
@@ -50,6 +53,17 @@ Or `go install github.com/TheOddKn1ght/wrep@latest`.
 ./wrep -apiprovider=weatherapi -apikey=$KEY -city=Tokyo -unit=imperial
 ./wrep -json | jq '.temp_c'
 ```
+
+### Live mode
+
+`-live` re-fetches and re-renders on the interval set by `-interval` (default `60s`, minimum `5s`). Ctrl+C exits cleanly; transient fetch failures print a stderr warning and the loop keeps going.
+
+```sh
+./wrep -live -interval=30s -fancy        # dashboard: clears screen each tick
+./wrep -live -interval=1m -json | jq .   # NDJSON: one JSON object per tick
+```
+
+When stdout is a TTY and neither `-json` nor `-q` is set, the screen is cleared and redrawn each tick. Otherwise (piped output, JSON, or quiet) each tick is appended below the previous one — for `-json` this means newline-delimited JSON suitable for piping.
 
 ### Environment
 - `NO_COLOR` — when set to any non-empty value, color escapes are suppressed even with `-fancy`.
@@ -66,6 +80,8 @@ apiProvider=wttr.in
 fancy=off
 verbose=off
 noColor=off
+live=off
+# interval=60s
 ```
 
 Edit it to set your defaults. CLI flags override file values.
@@ -79,6 +95,8 @@ Edit it to set your defaults. CLI flags override file values.
 | `fancy`       | `on` / `off` (also accepts `true`/`false`/`yes`/`1`) |
 | `verbose`     | `on` / `off` |
 | `noColor`     | `on` / `off` |
+| `live`        | `on` / `off` — enable live refresh mode |
+| `interval`    | Go duration string (e.g. `30s`, `5m`); min `5s` |
 
 ## Build a tagged release
 

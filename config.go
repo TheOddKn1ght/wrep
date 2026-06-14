@@ -8,6 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+)
+
+const (
+	defaultLiveInterval = 60 * time.Second
+	minLiveInterval     = 5 * time.Second
 )
 
 type Config struct {
@@ -22,6 +28,8 @@ type Config struct {
 	Quiet       bool
 	ShowVersion bool
 	Forecast    int
+	Live        bool
+	Interval    time.Duration
 }
 
 func MergeConfig(fileCfg Config, cliCfg Config) Config {
@@ -57,6 +65,12 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 	if cliCfg.Forecast != 0 {
 		final.Forecast = cliCfg.Forecast
 	}
+	if cliCfg.Live {
+		final.Live = true
+	}
+	if cliCfg.Interval != 0 {
+		final.Interval = cliCfg.Interval
+	}
 
 	return final
 }
@@ -76,12 +90,23 @@ func GetConfig() (Config, error) {
 	cliJSON := flag.Bool("json", false, "emit raw JSON instead of formatted output")
 	cliQuiet := flag.Bool("q", false, "suppress non-error messages")
 	cliForecast := flag.Int("f", 0, "show an N-day forecast (e.g. -f 3)")
+	cliLive := flag.Bool("live", false, "live mode: refresh weather on an interval until interrupted")
+	cliIntervalStr := flag.String("interval", "", "live-mode refresh interval as a Go duration (e.g. 30s, 5m); min 5s")
 	cliShowVersion := flag.Bool("V", false, "print version and exit")
 	cliShowVersionLong := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
 	if *cliShowVersion || *cliShowVersionLong {
 		return Config{ShowVersion: true}, nil
+	}
+
+	var cliInterval time.Duration
+	if s := strings.TrimSpace(*cliIntervalStr); s != "" {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid -interval %q: %w", s, err)
+		}
+		cliInterval = d
 	}
 
 	cliConfig := Config{
@@ -95,6 +120,8 @@ func GetConfig() (Config, error) {
 		JSON:        *cliJSON,
 		Quiet:       *cliQuiet,
 		Forecast:    *cliForecast,
+		Live:        *cliLive,
+		Interval:    cliInterval,
 	}
 
 	configDir := *cliConfigDir
@@ -141,6 +168,12 @@ func GetConfig() (Config, error) {
 	if final.JSON && final.Fancy {
 		final.Fancy = false
 	}
+	if final.Live && final.Interval == 0 {
+		final.Interval = defaultLiveInterval
+	}
+	if final.Interval > 0 && final.Interval < minLiveInterval {
+		return Config{}, fmt.Errorf("interval must be at least %s (got %s)", minLiveInterval, final.Interval)
+	}
 
 	return final, nil
 }
@@ -185,6 +218,14 @@ func readConfigFile(path string) (Config, error) {
 			cfg.JSON = parseBool(value)
 		case "quiet":
 			cfg.Quiet = parseBool(value)
+		case "live":
+			cfg.Live = parseBool(value)
+		case "interval":
+			d, err := time.ParseDuration(value)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid interval %q in config: %w", value, err)
+			}
+			cfg.Interval = d
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -208,6 +249,8 @@ apiProvider=wttr.in
 fancy=off
 verbose=off
 noColor=off
+live=off
+# interval=60s
 `
 	_, err = f.WriteString(defaultContent)
 	return err
@@ -244,6 +287,8 @@ func usage() {
 	fmt.Fprintln(out, "  wrep -f 3 -fancy")
 	fmt.Fprintln(out, "  wrep -apiprovider=weatherapi -apikey=$KEY -city=Tokyo -unit=imperial")
 	fmt.Fprintln(out, "  wrep -json | jq")
+	fmt.Fprintln(out, "  wrep -live -interval=30s -fancy")
+	fmt.Fprintln(out, "  wrep -live -interval=1m -json | jq .")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Environment:")
 	fmt.Fprintln(out, "  NO_COLOR   when set (any value), disables color escapes even with -fancy")
