@@ -29,6 +29,7 @@ type Config struct {
 	ShowVersion bool
 	Forecast    int
 	Live        bool
+	Art         bool
 	Interval    time.Duration
 }
 
@@ -68,6 +69,9 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 	if cliCfg.Live {
 		final.Live = true
 	}
+	if cliCfg.Art {
+		final.Art = true
+	}
 	if cliCfg.Interval != 0 {
 		final.Interval = cliCfg.Interval
 	}
@@ -91,6 +95,7 @@ func GetConfig() (Config, error) {
 	cliQuiet := flag.Bool("q", false, "suppress non-error messages")
 	cliForecast := flag.Int("f", 0, "show an N-day forecast (e.g. -f 3)")
 	cliLive := flag.Bool("live", false, "live mode: refresh weather on an interval until interrupted")
+	cliArt := flag.Bool("art", false, "neofetch-style display: weather info next to ASCII art")
 	cliIntervalStr := flag.String("interval", "", "live-mode refresh interval as a Go duration (e.g. 30s, 5m); min 5s")
 	cliShowVersion := flag.Bool("V", false, "print version and exit")
 	cliShowVersionLong := flag.Bool("version", false, "print version and exit")
@@ -121,6 +126,7 @@ func GetConfig() (Config, error) {
 		Quiet:       *cliQuiet,
 		Forecast:    *cliForecast,
 		Live:        *cliLive,
+		Art:         *cliArt,
 		Interval:    cliInterval,
 	}
 
@@ -167,6 +173,15 @@ func GetConfig() (Config, error) {
 	}
 	if final.JSON && final.Fancy {
 		final.Fancy = false
+	}
+	if final.JSON && final.Art {
+		final.Art = false
+	}
+	if final.Art && final.Forecast > 0 {
+		if !final.Quiet {
+			fmt.Fprintln(os.Stderr, "wrep: -art does not support -f; ignoring forecast")
+		}
+		final.Forecast = 0
 	}
 	if final.Live && final.Interval == 0 {
 		final.Interval = defaultLiveInterval
@@ -220,6 +235,8 @@ func readConfigFile(path string) (Config, error) {
 			cfg.Quiet = parseBool(value)
 		case "live":
 			cfg.Live = parseBool(value)
+		case "art":
+			cfg.Art = parseBool(value)
 		case "interval":
 			d, err := time.ParseDuration(value)
 			if err != nil {
@@ -250,6 +267,7 @@ fancy=off
 verbose=off
 noColor=off
 live=off
+art=off
 # interval=60s
 `
 	_, err = f.WriteString(defaultContent)
@@ -289,6 +307,7 @@ func usage() {
 	fmt.Fprintln(out, "  wrep -json | jq")
 	fmt.Fprintln(out, "  wrep -live -interval=30s -fancy")
 	fmt.Fprintln(out, "  wrep -live -interval=1m -json | jq .")
+	fmt.Fprintln(out, "  wrep -art -fancy")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Environment:")
 	fmt.Fprintln(out, "  NO_COLOR   when set (any value), disables color escapes even with -fancy")

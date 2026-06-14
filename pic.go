@@ -52,6 +52,10 @@ func Display(w io.Writer, info WeatherInfo, config Config) {
 		renderJSON(w, info)
 		return
 	}
+	if config.Art {
+		renderArt(w, info, config)
+		return
+	}
 	if len(info.Forecast) > 0 {
 		renderForecast(w, info, config)
 		return
