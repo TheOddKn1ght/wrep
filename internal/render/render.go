@@ -1,4 +1,6 @@
-package main
+// Package render turns normalized weather data into terminal output: plain
+// text, Unicode tables, sparklines, ASCII art, JSON, and custom templates.
+package render
 
 import (
 	"encoding/json"
@@ -7,6 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/TheOddKn1ght/wrep/internal/config"
+	"github.com/TheOddKn1ght/wrep/internal/weather"
 )
 
 const (
@@ -29,7 +34,7 @@ const (
 	forecastTempW = 8
 )
 
-func truncate(s string, maxRunes int) string {
+func Truncate(s string, maxRunes int) string {
 	runes := []rune(s)
 	if len(runes) <= maxRunes {
 		return s
@@ -40,58 +45,67 @@ func truncate(s string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
-func padRight(s string, w int) string {
+func PadRight(s string, w int) string {
 	if len([]rune(s)) >= w {
-		return truncate(s, w)
+		return Truncate(s, w)
 	}
 	return s + strings.Repeat(" ", w-len([]rune(s)))
 }
 
-func Display(w io.Writer, info WeatherInfo, config Config) {
-	if config.JSON {
+func Display(w io.Writer, info weather.WeatherInfo, cfg config.Config) {
+	switch {
+	case cfg.JSON:
 		renderJSON(w, info)
-		return
+	case cfg.Format != "":
+		renderFormat(w, info, cfg)
+	case cfg.Art:
+		renderArt(w, info, cfg)
+	case cfg.Hourly:
+		renderCurrent(w, info, cfg)
+		renderHourly(w, info, cfg)
+		if len(info.Forecast) > 0 {
+			renderForecast(w, info, cfg)
+		}
+	case len(info.Forecast) > 0:
+		renderForecast(w, info, cfg)
+	default:
+		renderCurrent(w, info, cfg)
 	}
-	if config.Art {
-		renderArt(w, info, config)
-		return
-	}
-	if len(info.Forecast) > 0 {
-		renderForecast(w, info, config)
-		return
-	}
-	renderCurrent(w, info, config)
 }
 
-func renderJSON(w io.Writer, info WeatherInfo) {
+func renderJSON(w io.Writer, info weather.WeatherInfo) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(info)
 }
 
-func renderCurrent(w io.Writer, info WeatherInfo, config Config) {
+func renderCurrent(w io.Writer, info weather.WeatherInfo, cfg config.Config) {
 	color, emoji, reset := "", "", ""
-	if useColor(config) {
+	if useColor(cfg) {
 		color = WeatherColor(info.Type)
 		reset = Reset
 	}
-	if config.Fancy {
+	if cfg.Fancy {
 		emoji = WeatherEmoji(info.Type) + " "
 	}
-	fmt.Fprintf(w, "%s%sWeather: %s, %s, UVIndex %s%s\n",
+	fmt.Fprintf(w, "%s%sWeather: %s (feels like %s), %s, humidity %.0f%%, wind %s %s, UVIndex %s%s\n",
 		color, emoji,
-		formatTemp(info.TempC, info.TempF, config.Unit),
+		FormatTemp(info.TempC, info.TempF, cfg.Unit),
+		FormatTemp(info.FeelsLikeC, info.FeelsLikeF, cfg.Unit),
 		info.Description,
+		info.Humidity,
+		FormatWind(info.WindKph, info.WindMph, cfg.Unit),
+		weather.WindCompass(info.WindDegree),
 		formatUV(info.UVIndex),
 		reset,
 	)
 }
 
-func renderForecast(w io.Writer, info WeatherInfo, config Config) {
+func renderForecast(w io.Writer, info weather.WeatherInfo, cfg config.Config) {
 	top, mid, bot := forecastBorders()
 	indent := ""
-	color := useColor(config)
-	if config.Fancy {
+	color := useColor(cfg)
+	if cfg.Fancy {
 		indent = "  "
 		fmt.Fprintln(w)
 		header := "  📅 Forecast"
@@ -106,35 +120,35 @@ func renderForecast(w io.Writer, info WeatherInfo, config Config) {
 
 	fmt.Fprintln(w, indent+top)
 	fmt.Fprintf(w, indent+"│%s│%s│%s│%s│%s│\n",
-		padRight(" Day", forecastDayW),
-		padRight(" Date", forecastDateW),
-		padRight(" Conditions", forecastCondW),
-		padRight(" Min", forecastTempW),
-		padRight(" Max", forecastTempW))
+		PadRight(" Day", forecastDayW),
+		PadRight(" Date", forecastDateW),
+		PadRight(" Conditions", forecastCondW),
+		PadRight(" Min", forecastTempW),
+		PadRight(" Max", forecastTempW))
 	fmt.Fprintln(w, indent+mid)
 
 	limit := len(info.Forecast)
-	if config.Forecast > 0 && config.Forecast < limit {
-		limit = config.Forecast
+	if cfg.Forecast > 0 && cfg.Forecast < limit {
+		limit = cfg.Forecast
 	}
 	for i := 0; i < limit; i++ {
 		d := info.Forecast[i]
 		dayLabel := fmt.Sprintf(" Day %d", i+1)
-		dateCell := padRight(" "+formatForecastDate(d.Date), forecastDateW)
-		condCell := padRight(truncate(d.Description, forecastCondW), forecastCondW)
-		minCell := padRight(" "+formatTemp(d.MinTempC, d.MinTempF, config.Unit), forecastTempW)
-		maxCell := padRight(" "+formatTemp(d.MaxTempC, d.MaxTempF, config.Unit), forecastTempW)
+		dateCell := PadRight(" "+formatForecastDate(d.Date), forecastDateW)
+		condCell := PadRight(" "+Truncate(d.Description, forecastCondW-1), forecastCondW)
+		minCell := PadRight(" "+FormatTemp(d.MinTempC, d.MinTempF, cfg.Unit), forecastTempW)
+		maxCell := PadRight(" "+FormatTemp(d.MaxTempC, d.MaxTempF, cfg.Unit), forecastTempW)
 
 		if color {
 			rowColor := WeatherColor(d.Type)
 			fmt.Fprintf(w, indent+"│%s%s%s│%s│%s%s%s│%s│%s│\n",
-				rowColor, padRight(dayLabel, forecastDayW), Reset,
+				rowColor, PadRight(dayLabel, forecastDayW), Reset,
 				dateCell,
 				rowColor, condCell, Reset,
 				minCell, maxCell)
 		} else {
 			fmt.Fprintf(w, indent+"│%s│%s│%s│%s│%s│\n",
-				padRight(dayLabel, forecastDayW), dateCell, condCell, minCell, maxCell)
+				PadRight(dayLabel, forecastDayW), dateCell, condCell, minCell, maxCell)
 		}
 	}
 
@@ -149,8 +163,8 @@ func formatForecastDate(t time.Time) string {
 	return t.Format("Mon, Jan 2")
 }
 
-func formatTemp(c, f float64, unit string) string {
-	if unit == UnitImperial {
+func FormatTemp(c, f float64, unit string) string {
+	if unit == config.UnitImperial {
 		return fmt.Sprintf("%.1f°F", f)
 	}
 	return fmt.Sprintf("%.1f°C", c)
@@ -160,6 +174,13 @@ func formatUV(uv float64) string {
 	return fmt.Sprintf("%.1f", uv)
 }
 
+func FormatWind(kph, mph float64, unit string) string {
+	if unit == config.UnitImperial {
+		return fmt.Sprintf("%.0f mph", mph)
+	}
+	return fmt.Sprintf("%.0f km/h", kph)
+}
+
 func forecastBorders() (top, mid, bot string) {
 	top = "┌" + strings.Repeat("─", forecastDayW) + "┬" + strings.Repeat("─", forecastDateW) + "┬" + strings.Repeat("─", forecastCondW) + "┬" + strings.Repeat("─", forecastTempW) + "┬" + strings.Repeat("─", forecastTempW) + "┐"
 	mid = "├" + strings.Repeat("─", forecastDayW) + "┼" + strings.Repeat("─", forecastDateW) + "┼" + strings.Repeat("─", forecastCondW) + "┼" + strings.Repeat("─", forecastTempW) + "┼" + strings.Repeat("─", forecastTempW) + "┤"
@@ -167,11 +188,11 @@ func forecastBorders() (top, mid, bot string) {
 	return
 }
 
-func useColor(config Config) bool {
-	if !config.Fancy {
+func useColor(cfg config.Config) bool {
+	if !cfg.Fancy {
 		return false
 	}
-	if config.NoColor {
+	if cfg.NoColor {
 		return false
 	}
 	if v := os.Getenv("NO_COLOR"); v != "" {
@@ -180,10 +201,12 @@ func useColor(config Config) bool {
 	if os.Getenv("TERM") == "dumb" {
 		return false
 	}
-	return stdoutIsTTY()
+	return StdoutIsTTY()
 }
 
-func stdoutIsTTY() bool {
+// StdoutIsTTY reports whether stdout is attached to a terminal; used both for
+// color decisions here and screen-clearing in live mode.
+func StdoutIsTTY() bool {
 	fi, err := os.Stdout.Stat()
 	if err != nil {
 		return true
@@ -191,38 +214,38 @@ func stdoutIsTTY() bool {
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
-func WeatherColor(wt WeatherType) string {
+func WeatherColor(wt weather.WeatherType) string {
 	switch wt {
-	case Sunny:
+	case weather.Sunny:
 		return Yellow
-	case Cloudy:
+	case weather.Cloudy:
 		return White
-	case Rainy:
+	case weather.Rainy:
 		return Blue
-	case Snowy:
+	case weather.Snowy:
 		return Cyan
-	case Stormy:
+	case weather.Stormy:
 		return Magenta
-	case Foggy:
+	case weather.Foggy:
 		return Gray
 	default:
 		return Green
 	}
 }
 
-func WeatherEmoji(wt WeatherType) string {
+func WeatherEmoji(wt weather.WeatherType) string {
 	switch wt {
-	case Sunny:
+	case weather.Sunny:
 		return "☀️"
-	case Cloudy:
+	case weather.Cloudy:
 		return "☁️"
-	case Rainy:
+	case weather.Rainy:
 		return "🌧️"
-	case Snowy:
+	case weather.Snowy:
 		return "❄️"
-	case Stormy:
+	case weather.Stormy:
 		return "⛈️"
-	case Foggy:
+	case weather.Foggy:
 		return "🌫️"
 	default:
 		return "🌈"

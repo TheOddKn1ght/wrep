@@ -1,54 +1,57 @@
-package main
+package render
 
 import (
 	"fmt"
 	"io"
+
+	"github.com/TheOddKn1ght/wrep/internal/config"
+	"github.com/TheOddKn1ght/wrep/internal/weather"
 )
 
-var weatherArtTable = map[WeatherType][]string{
-	Sunny: {
+var weatherArtTable = map[weather.WeatherType][]string{
+	weather.Sunny: {
 		`    \   /    `,
 		`     .-.     `,
 		`  - (   ) -  `,
 		`     '-'     `,
 		`    /   \    `,
 	},
-	Cloudy: {
+	weather.Cloudy: {
 		`             `,
 		`     .--.    `,
 		`  .-(    ).  `,
 		` (___.__)__) `,
 		`             `,
 	},
-	Rainy: {
+	weather.Rainy: {
 		`     .--.    `,
 		`  .-(    ).  `,
 		` (___.__)__) `,
 		`  ' ' ' '    `,
 		`   ' ' ' '   `,
 	},
-	Snowy: {
+	weather.Snowy: {
 		`     .--.    `,
 		`  .-(    ).  `,
 		` (___.__)__) `,
 		`   *  *  *   `,
 		`  *  *  *    `,
 	},
-	Stormy: {
+	weather.Stormy: {
 		`     .--.    `,
 		`  .-(    ).  `,
 		` (___.__)__) `,
 		`    /_  /_   `,
 		`    /   /    `,
 	},
-	Foggy: {
+	weather.Foggy: {
 		`             `,
 		`  _ - _ - _  `,
 		`   - _ - _ - `,
 		`  _ - _ - _  `,
 		`   - _ - _ - `,
 	},
-	Unknown: {
+	weather.Unknown: {
 		`    .---.    `,
 		`    |   |    `,
 		`    | ? |    `,
@@ -57,31 +60,40 @@ var weatherArtTable = map[WeatherType][]string{
 	},
 }
 
-func WeatherArt(wt WeatherType) []string {
+func WeatherArt(wt weather.WeatherType) []string {
 	if art, ok := weatherArtTable[wt]; ok {
 		return art
 	}
-	return weatherArtTable[Unknown]
+	return weatherArtTable[weather.Unknown]
 }
 
-func renderArt(w io.Writer, info WeatherInfo, config Config) {
+func renderArt(w io.Writer, info weather.WeatherInfo, cfg config.Config) {
 	color, reset, bold := "", "", ""
-	if useColor(config) {
+	if useColor(cfg) {
 		color = WeatherColor(info.Type)
 		reset = Reset
 		bold = Bold
 	}
 
 	condition := info.Description
-	if config.Fancy {
+	if cfg.Fancy {
 		condition = WeatherEmoji(info.Type) + " " + condition
 	}
 
 	infoLines := []struct{ label, value string }{
-		{"City", config.City},
+		{"City", cfg.City},
 		{"Condition", condition},
-		{"Temperature", formatTemp(info.TempC, info.TempF, config.Unit)},
+		{"Temperature", FormatTemp(info.TempC, info.TempF, cfg.Unit)},
+		{"Feels like", FormatTemp(info.FeelsLikeC, info.FeelsLikeF, cfg.Unit)},
+		{"Humidity", fmt.Sprintf("%.0f%%", info.Humidity)},
+		{"Wind", FormatWind(info.WindKph, info.WindMph, cfg.Unit) + " " + weather.WindCompass(info.WindDegree)},
 		{"UV Index", formatUV(info.UVIndex)},
+	}
+	if info.Sunrise != "" && info.Sunset != "" {
+		infoLines = append(infoLines,
+			struct{ label, value string }{"Sunrise", info.Sunrise},
+			struct{ label, value string }{"Sunset", info.Sunset},
+		)
 	}
 
 	art := WeatherArt(info.Type)
@@ -104,7 +116,7 @@ func renderArt(w io.Writer, info WeatherInfo, config Config) {
 		if i < len(art) {
 			artLine = art[i]
 		}
-		artCell := padRight(artLine, artW)
+		artCell := PadRight(artLine, artW)
 
 		var infoCell string
 		if i < len(infoLines) {

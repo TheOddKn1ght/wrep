@@ -1,4 +1,6 @@
-package main
+// Package config owns the wrep configuration: CLI flags, the ~/.wrep file,
+// merging, validation, and the shared provider/unit constants.
+package config
 
 import (
 	"bufio"
@@ -12,8 +14,17 @@ import (
 )
 
 const (
+	ProviderWttr       = "wttr.in"
+	ProviderWeatherAPI = "weatherapi"
+	ProviderOpenMeteo  = "open-meteo"
+	UnitMetric         = "metric"
+	UnitImperial       = "imperial"
+)
+
+const (
 	defaultLiveInterval = 60 * time.Second
 	minLiveInterval     = 5 * time.Second
+	DefaultCacheTTL     = 10 * time.Minute
 )
 
 type Config struct {
@@ -28,9 +39,13 @@ type Config struct {
 	Quiet       bool
 	ShowVersion bool
 	Forecast    int
+	Hourly      bool
 	Live        bool
 	Art         bool
 	Interval    time.Duration
+	NoCache     bool
+	CacheTTL    time.Duration
+	Format      string
 }
 
 func MergeConfig(fileCfg Config, cliCfg Config) Config {
@@ -72,8 +87,20 @@ func MergeConfig(fileCfg Config, cliCfg Config) Config {
 	if cliCfg.Art {
 		final.Art = true
 	}
+	if cliCfg.Hourly {
+		final.Hourly = true
+	}
 	if cliCfg.Interval != 0 {
 		final.Interval = cliCfg.Interval
+	}
+	if cliCfg.NoCache {
+		final.NoCache = true
+	}
+	if cliCfg.CacheTTL != 0 {
+		final.CacheTTL = cliCfg.CacheTTL
+	}
+	if cliCfg.Format != "" {
+		final.Format = cliCfg.Format
 	}
 
 	return final
@@ -87,16 +114,20 @@ func GetConfig() (Config, error) {
 	cliCity := flag.String("city", "", "override city")
 	cliUnit := flag.String("unit", "", "override unit: metric or imperial")
 	cliAPIKey := flag.String("apikey", "", "override API key (WeatherAPI only)")
-	cliAPIProvider := flag.String("apiprovider", "", "API provider: wttr.in or weatherapi")
+	cliAPIProvider := flag.String("apiprovider", "", "API provider: wttr.in, open-meteo or weatherapi")
 	cliVerbose := flag.Bool("v", false, "verbose output")
 	cliFancy := flag.Bool("fancy", false, "fancy output with colors and emojis")
 	cliNoColor := flag.Bool("no-color", false, "disable color escapes (also honors NO_COLOR env)")
 	cliJSON := flag.Bool("json", false, "emit raw JSON instead of formatted output")
 	cliQuiet := flag.Bool("q", false, "suppress non-error messages")
 	cliForecast := flag.Int("f", 0, "show an N-day forecast (e.g. -f 3)")
+	cliHourly := flag.Bool("hourly", false, "show the next 24 hours as a sparkline + table")
 	cliLive := flag.Bool("live", false, "live mode: refresh weather on an interval until interrupted")
 	cliArt := flag.Bool("art", false, "neofetch-style display: weather info next to ASCII art")
 	cliIntervalStr := flag.String("interval", "", "live-mode refresh interval as a Go duration (e.g. 30s, 5m); min 5s")
+	cliNoCache := flag.Bool("no-cache", false, "bypass the response cache")
+	cliCacheTTLStr := flag.String("cache-ttl", "", "cache freshness window as a Go duration (default 10m)")
+	cliFormat := flag.String("format", "", "custom output template, e.g. \"{emoji} {temp}\" (see README for placeholders)")
 	cliShowVersion := flag.Bool("V", false, "print version and exit")
 	cliShowVersionLong := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -114,6 +145,15 @@ func GetConfig() (Config, error) {
 		cliInterval = d
 	}
 
+	var cliCacheTTL time.Duration
+	if s := strings.TrimSpace(*cliCacheTTLStr); s != "" {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid -cache-ttl %q: %w", s, err)
+		}
+		cliCacheTTL = d
+	}
+
 	cliConfig := Config{
 		APIProvider: *cliAPIProvider,
 		APIKey:      *cliAPIKey,
@@ -125,9 +165,13 @@ func GetConfig() (Config, error) {
 		JSON:        *cliJSON,
 		Quiet:       *cliQuiet,
 		Forecast:    *cliForecast,
+		Hourly:      *cliHourly,
 		Live:        *cliLive,
 		Art:         *cliArt,
 		Interval:    cliInterval,
+		NoCache:     *cliNoCache,
+		CacheTTL:    cliCacheTTL,
+		Format:      *cliFormat,
 	}
 
 	configDir := *cliConfigDir
@@ -146,7 +190,7 @@ func GetConfig() (Config, error) {
 		}
 	}
 
-	fileConfig, err := readConfigFile(configPath)
+	fileConfig, err := ReadConfigFile(configPath)
 	if err != nil {
 		return Config{}, err
 	}
@@ -156,17 +200,23 @@ func GetConfig() (Config, error) {
 	if final.APIProvider == "" {
 		final.APIProvider = ProviderWttr
 	}
+	if final.APIProvider == "openmeteo" {
+		final.APIProvider = ProviderOpenMeteo
+	}
 	if final.Unit == "" {
 		final.Unit = UnitMetric
 	}
-	if !validProvider(final.APIProvider) {
-		return Config{}, fmt.Errorf("invalid apiProvider %q (want %q or %q)", final.APIProvider, ProviderWttr, ProviderWeatherAPI)
+	if !ValidProvider(final.APIProvider) {
+		return Config{}, fmt.Errorf("invalid apiProvider %q (want %q, %q or %q)", final.APIProvider, ProviderWttr, ProviderWeatherAPI, ProviderOpenMeteo)
 	}
-	if !validUnit(final.Unit) {
+	if !ValidUnit(final.Unit) {
 		return Config{}, fmt.Errorf("invalid unit %q (want %q or %q)", final.Unit, UnitMetric, UnitImperial)
 	}
 	if final.City == "" {
 		return Config{}, errors.New("config missing required field: defaultCity (or pass -city)")
+	}
+	if final.Forecast < 0 {
+		return Config{}, fmt.Errorf("forecast days must be positive (got %d)", final.Forecast)
 	}
 	if final.APIProvider == ProviderWeatherAPI && (final.APIKey == "" || final.APIKey == "your_api_key_here") {
 		return Config{}, errors.New("apiProvider=weatherapi requires apiKey (set in ~/.wrep or pass -apikey)")
@@ -177,11 +227,20 @@ func GetConfig() (Config, error) {
 	if final.JSON && final.Art {
 		final.Art = false
 	}
+	if final.JSON && final.Format != "" {
+		final.Format = ""
+	}
 	if final.Art && final.Forecast > 0 {
 		if !final.Quiet {
 			fmt.Fprintln(os.Stderr, "wrep: -art does not support -f; ignoring forecast")
 		}
 		final.Forecast = 0
+	}
+	if final.Art && final.Hourly {
+		if !final.Quiet {
+			fmt.Fprintln(os.Stderr, "wrep: -art does not support -hourly; ignoring hourly")
+		}
+		final.Hourly = false
 	}
 	if final.Live && final.Interval == 0 {
 		final.Interval = defaultLiveInterval
@@ -189,11 +248,17 @@ func GetConfig() (Config, error) {
 	if final.Interval > 0 && final.Interval < minLiveInterval {
 		return Config{}, fmt.Errorf("interval must be at least %s (got %s)", minLiveInterval, final.Interval)
 	}
+	if final.CacheTTL < 0 {
+		return Config{}, fmt.Errorf("cache TTL must be positive (got %s)", final.CacheTTL)
+	}
+	if final.CacheTTL == 0 {
+		final.CacheTTL = DefaultCacheTTL
+	}
 
 	return final, nil
 }
 
-func readConfigFile(path string) (Config, error) {
+func ReadConfigFile(path string) (Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("failed to open config file: %w", err)
@@ -224,25 +289,37 @@ func readConfigFile(path string) (Config, error) {
 		case "apiProvider":
 			cfg.APIProvider = value
 		case "fancy":
-			cfg.Fancy = parseBool(value)
+			cfg.Fancy = ParseBool(value)
 		case "verbose":
-			cfg.Verbose = parseBool(value)
+			cfg.Verbose = ParseBool(value)
 		case "noColor":
-			cfg.NoColor = parseBool(value)
+			cfg.NoColor = ParseBool(value)
 		case "json":
-			cfg.JSON = parseBool(value)
+			cfg.JSON = ParseBool(value)
 		case "quiet":
-			cfg.Quiet = parseBool(value)
+			cfg.Quiet = ParseBool(value)
 		case "live":
-			cfg.Live = parseBool(value)
+			cfg.Live = ParseBool(value)
 		case "art":
-			cfg.Art = parseBool(value)
+			cfg.Art = ParseBool(value)
+		case "hourly":
+			cfg.Hourly = ParseBool(value)
+		case "cache":
+			cfg.NoCache = !ParseBool(value)
+		case "format":
+			cfg.Format = value
 		case "interval":
 			d, err := time.ParseDuration(value)
 			if err != nil {
 				return Config{}, fmt.Errorf("invalid interval %q in config: %w", value, err)
 			}
 			cfg.Interval = d
+		case "cacheTTL":
+			d, err := time.ParseDuration(value)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid cacheTTL %q in config: %w", value, err)
+			}
+			cfg.CacheTTL = d
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -252,7 +329,8 @@ func readConfigFile(path string) (Config, error) {
 }
 
 func GenerateDefaultConfig(configPath string) error {
-	f, err := os.Create(configPath)
+	// 0600: the config may hold a WeatherAPI key.
+	f, err := os.OpenFile(configPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -262,19 +340,24 @@ func GenerateDefaultConfig(configPath string) error {
 apiKey=your_api_key_here
 defaultCity=Moscow
 units=metric
+# apiProvider: wttr.in, weatherapi, or open-meteo
 apiProvider=wttr.in
 fancy=off
 verbose=off
 noColor=off
 live=off
 art=off
+hourly=off
+cache=on
 # interval=60s
+# cacheTTL=10m
+# format={emoji} {temp}
 `
 	_, err = f.WriteString(defaultContent)
 	return err
 }
 
-func parseBool(s string) bool {
+func ParseBool(s string) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "on", "true", "yes", "1":
 		return true
@@ -282,11 +365,11 @@ func parseBool(s string) bool {
 	return false
 }
 
-func validProvider(p string) bool {
-	return p == ProviderWttr || p == ProviderWeatherAPI
+func ValidProvider(p string) bool {
+	return p == ProviderWttr || p == ProviderWeatherAPI || p == ProviderOpenMeteo
 }
 
-func validUnit(u string) bool {
+func ValidUnit(u string) bool {
 	return u == UnitMetric || u == UnitImperial
 }
 
@@ -303,11 +386,13 @@ func usage() {
 	fmt.Fprintln(out, "Examples:")
 	fmt.Fprintln(out, "  wrep -city=Berlin -fancy")
 	fmt.Fprintln(out, "  wrep -f 3 -fancy")
+	fmt.Fprintln(out, "  wrep -hourly")
+	fmt.Fprintln(out, "  wrep -apiprovider=open-meteo -city=Tokyo -f 7")
 	fmt.Fprintln(out, "  wrep -apiprovider=weatherapi -apikey=$KEY -city=Tokyo -unit=imperial")
 	fmt.Fprintln(out, "  wrep -json | jq")
 	fmt.Fprintln(out, "  wrep -live -interval=30s -fancy")
-	fmt.Fprintln(out, "  wrep -live -interval=1m -json | jq .")
 	fmt.Fprintln(out, "  wrep -art -fancy")
+	fmt.Fprintln(out, "  wrep -format \"{emoji} {temp} {winddir}\"   # for tmux/i3/polybar status bars")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Environment:")
 	fmt.Fprintln(out, "  NO_COLOR   when set (any value), disables color escapes even with -fancy")
